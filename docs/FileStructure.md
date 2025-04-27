@@ -61,7 +61,8 @@
 │   │   ├── EditorTabs.tsx      # Tabs for multiple open files in Code mode
 │   │   └── Terminal.tsx        # Terminal component for WebContainer commands
 │   ├── preview/                # Preview components
-│   │   ├── LivePreview.tsx     # Interactive preview from WebContainer
+│   │   ├── ComponentPreview.tsx # Iframe wrapper loading the preview app
+│   │   ├── LivePreview.tsx     # Interactive preview from WebContainer (Full App? TBD)
 │   │   └── ShareablePreview.tsx # Shareable preview generation
 │   └── shared/                 # Shared UI components (wrapping Radix, styled w/ Tailwind)
 │       ├── Button.tsx          # Button component
@@ -75,7 +76,8 @@
 │   │   ├── parser.ts           # Tree-sitter parser initialization and management
 │   │   ├── traversal.ts        # AST traversal utilities for component detection
 │   │   ├── reactComponentUtils.ts # React component detection and analysis
-│   │   └── mapper.ts           # Converts AST to React Flow nodes/edges for Design view
+│   │   ├── mapper.ts           # Converts AST to React Flow nodes/edges for Design view
+│   │   └── componentMapGenerator.ts # **NEW: Generates ComponentName:filePath map from AST default exports**
 │   ├── reactFlow/              # React Flow integration utilities
 │   │   ├── nodeTypes.ts        # Custom node type definitions
 │   │   ├── edgeTypes.ts        # Custom edge type definitions
@@ -161,10 +163,12 @@
 
 The React Flow integration for visualizing the AST happens through these key components:
 
-1. **AST to Visual Mapping**:
-   - `src/lib/ast/mapper.ts` converts AST nodes to React Flow nodes/edges
-   - `src/lib/reactFlow/nodeTypes.ts` defines visual representations for components
-   - `src/lib/reactFlow/layoutEngine.ts` handles automatic positioning
+1.  **AST to Visual Mapping & Analysis**:
+    *   `src/lib/ast/parser.ts` & `src/lib/ast/traversal.ts` parse code into AST.
+    *   `src/lib/ast/mapper.ts` converts AST nodes to React Flow nodes/edges.
+    *   **`src/lib/ast/componentMapGenerator.ts` generates the component-to-filepath map for the preview system.**
+    *   `src/lib/reactFlow/nodeTypes.ts` defines visual representations for components.
+    *   `src/lib/reactFlow/layoutEngine.ts` handles automatic positioning.
 
 2. **React Flow Canvas**:
    - `src/components/design/Canvas.tsx` implements the main React Flow instance
@@ -217,3 +221,23 @@ The React Flow integration for visualizing the AST happens through these key com
    - Intent-based actions for code and design manipulation
    - Access to AST and file system for intelligent operations
 
+
+```
+
+## Preview App Structure (`/preview-app` - Generated inside WebContainer)
+
+This minimal Vite app is generated dynamically to preview individual components.
+
+```
+/preview-app
+├── src/
+│   ├── componentMap.js       # **NEW: Dynamically generated map { ComponentName: filePath }**
+│   ├── PreviewLoader.tsx     # **MODIFIED: Uses componentMap and componentName param**
+│   └── main.tsx              # Standard React entry point
+├── vite.config.ts            # Vite config with alias to /project/src
+├── package.json              # Minimal dependencies (React, Vite, etc.)
+├── tsconfig.json             # TypeScript config
+└── index.html                # Basic HTML shell
+```
+
+</rewritten_file>
