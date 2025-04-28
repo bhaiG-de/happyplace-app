@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { cn } from "@/lib/utils"; // Import cn utility
 import { Header } from "@/components/core/Header"; // Import Header
+import { WebContainerProvider } from "@/context/WebContainerContext"; // Import the provider
 
 // We'll rely on the font families defined in tailwind.config.ts
 // const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -20,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> {/* Added suppressHydrationWarning for potential client/server mismatches */}
+    <html lang="en" suppressHydrationWarning>
       <body
         className={cn(
           "min-h-screen bg-background font-sans antialiased",
@@ -28,11 +29,13 @@ export default function RootLayout({
           // Add specific font variables here if needed, e.g. inter.variable, jetbrainsMono.variable
         )}
       >
-        {/* Basic structure: Header + Main Content Area */}
-        <div className="relative flex min-h-screen flex-col">
-          <Header /> { /* Use the actual Header component */}
-          <main className="flex-1 container py-6">{children}</main>
-        </div>
+        {/* Wrap the main content area with the provider */}
+        <WebContainerProvider>
+          <div className="relative flex min-h-screen flex-col">
+            <Header /> { /* Use the actual Header component */}
+            <main className="flex-1 container py-6">{children}</main>
+          </div>
+        </WebContainerProvider>
       </body>
     </html>
   );

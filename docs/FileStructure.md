@@ -29,6 +29,9 @@
 │   ├── (auth)/                 # Authentication routes (group)
 │   │   ├── login/              # Login page
 │   │   └── signup/             # Signup page
+│   ├── instance/               # Instance routes
+│   │   └── [id]/              # Dynamic instance route
+│   │       └── page.tsx        # Instance page with WebContainer and editor
 │   ├── initiatives/            # Project initiatives routes
 │   │   └── [id]/              # Initiative details with tab system (Knowledge/Design/Code)
 │   ├── layout.tsx              # Root layout with global providers
@@ -74,10 +77,10 @@
 │   │   └── tools.ts            # AI tools implementation (file ops, AST)
 │   ├── ast/                    # AST handling with Tree-sitter
 │   │   ├── parser.ts           # Tree-sitter parser initialization and management
-│   │   ├── traversal.ts        # AST traversal utilities for component detection
-│   │   ├── reactComponentUtils.ts # React component detection and analysis
+│   │   ├── traversal.ts        # **UPDATED:** AST traversal utilities for component detection
 │   │   ├── mapper.ts           # Converts AST to React Flow nodes/edges for Design view
-│   │   └── componentMapGenerator.ts # **NEW: Generates ComponentName:filePath map from AST default exports**
+│   │   ├── componentMapGenerator.ts # **NEW: Generates ComponentName:filePath map from AST default exports**
+│   │   └── codegen.ts          # **NEW:** AST to code generation (Recast + Prettier)
 │   ├── reactFlow/              # React Flow integration utilities
 │   │   ├── nodeTypes.ts        # Custom node type definitions
 │   │   ├── edgeTypes.ts        # Custom edge type definitions
@@ -104,7 +107,8 @@
 │   ├── useDesignView.ts        # React Flow state and operations for design view
 │   ├── useReactFlow.ts         # React Flow integration with AST changes
 │   ├── useCodeView.ts          # Monaco editor state for code view
-│   └── useSocket.ts            # WebSocket connection and event handlers
+│   ├── useSocket.ts            # WebSocket connection and event handlers
+│   └── useAstRegistry.ts       # **NEW:** Hook to manage global AST registry state
 ├── context/                     # React context providers
 │   ├── AppContext.tsx          # Main app context with global state
 │   ├── FileTreeContext.tsx     # Shared file tree and selection state
@@ -167,6 +171,7 @@ The React Flow integration for visualizing the AST happens through these key com
     *   `src/lib/ast/parser.ts` & `src/lib/ast/traversal.ts` parse code into AST.
     *   `src/lib/ast/mapper.ts` converts AST nodes to React Flow nodes/edges.
     *   **`src/lib/ast/componentMapGenerator.ts` generates the component-to-filepath map for the preview system.**
+    *   **`src/lib/ast/codegen.ts` handles AST-based code modifications and printing.**
     *   `src/lib/reactFlow/nodeTypes.ts` defines visual representations for components.
     *   `src/lib/reactFlow/layoutEngine.ts` handles automatic positioning.
 
