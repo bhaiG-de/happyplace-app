@@ -35,7 +35,7 @@
 | **P2‑03** | Implement fs helpers: `mount`, `readFile`, `writeFile`, `mkdir`, `rm` (in `src/lib/container/filesystem.ts`) | ☑ |
 | **P2‑04** | Wire editor (`src/components/code/Editor.tsx`) to VFS (`src/hooks/useFileSystem.ts`) | ☑ |
 | **P2‑05** | Mount fetched repo into `/project` (using `src/lib/container/filesystem.ts`) | ☑ |
-| **P2‑06** | **NEW:** add `watchDirectory()` + `useFileWatcher` hook for live change events (likely `src/lib/container/filesystem.ts`, `src/hooks/useFileSystem.ts`) | ☐ |
+| **P2‑06** | **NEW:** add `watchDirectory()` + `useFileWatcher` hook for live change events (likely `src/lib/container/filesystem.ts`, `src/hooks/useFileSystem.ts`) | ☑ |
 | **P2‑07** | Docs: "Watching files in WebContainer" section | ☐ |
 
 **Progress Notes:**
@@ -44,7 +44,9 @@
 - ✅ Implemented filesystem helpers with proper TypeScript types
 - ✅ Set up routing to instance page with dynamic `[id]` parameter
 - ✅ Wired editor to VFS and mounted fetched repo into `/project`
-- 🔄 Next steps: Implement file system hooks and wire up the editor
+- ✅ Implemented file watching functionality with `useFileWatcher` hook
+- ✅ Implemented FileTree UI component and integrated it with the code editor for file selection and preview. The UI now matches the wireframe and file structure plan.
+- ✅ Fixed file selection logic to prevent errors when selecting directories in FileTree.
 - **Note:** A long-term solution would be to implement the FileTree component from the file structure plan, allowing users to select any file and removing the need for a hardcoded path.
 
 ---

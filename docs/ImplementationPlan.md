@@ -35,6 +35,9 @@ _No scope changes; retained for completeness._
 | Integrate `@webcontainer/api` | WebContainer boots in provider `useWebContainer` |
 | Mount repo into `/project` | GitHub files live in VFS |
 | Filesystem helpers | `mount`, `readFile`, `writeFile`, `mkdir`, `rm` |
+| Wire editor to VFS | `useFileSystem` provides `readFile` etc. |
+| Implement FileTree UI | Component renders files, handles selection |
+| **FIX:** Handle directory selection | UI prevents `readFile` on directories |
 | **NEW:** `watchDirectory()` + `useFileWatcher` | Emits `file:add`, `file:change`, `file:unlink` events |
 
 ---

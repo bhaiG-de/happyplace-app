@@ -12,16 +12,23 @@ import type * as monaco from 'monaco-editor'; // Import monaco types
 //   paths: { vs: '/monaco-vs' } 
 // });
 
+// Extend EditorProps to explicitly include path if it's not already there
+// (though it should be based on the type definition)
+interface CodeEditorProps extends EditorProps {
+  path?: string;
+}
+
 /**
  * A basic wrapper around the Monaco Editor component.
  */
-export const CodeEditor: React.FC<EditorProps> = ({
+export const CodeEditor: React.FC<CodeEditorProps> = ({
   language = 'plaintext',
   value = '',
   onChange,
   options,
   height = "60vh",
   theme = "vs-dark", // Keep theme prop
+  path, // Explicitly accept the path prop
   ...rest // Pass other valid EditorProps down
 }) => {
   // const { resolvedTheme } = useTheme(); // Example for theme integration
@@ -52,6 +59,7 @@ export const CodeEditor: React.FC<EditorProps> = ({
       <Editor
         height="100%"
         language={language}
+        path={path} // Pass the path prop down
         value={value}
         onChange={onChange}
         onMount={handleEditorDidMount}
