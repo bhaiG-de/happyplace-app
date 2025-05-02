@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils"; // Import cn utility
 import { Header } from "@/components/core/Header"; // Import Header
 import { WebContainerProvider } from "@/context/WebContainerContext"; // Import the provider
+import { AstRegistryProvider } from "@/context/AstRegistryContext"; // Import the AST provider
 
 // We'll rely on the font families defined in tailwind.config.ts
 // const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -29,12 +30,14 @@ export default function RootLayout({
           // Add specific font variables here if needed, e.g. inter.variable, jetbrainsMono.variable
         )}
       >
-        {/* Wrap the main content area with the provider */}
+        {/* Wrap the main content area with the providers */}
         <WebContainerProvider>
-          <div className="relative flex min-h-screen flex-col">
-            <Header /> { /* Use the actual Header component */}
-            <main className="flex-1 container py-6">{children}</main>
-          </div>
+          <AstRegistryProvider> { /* AST Provider needs WebContainer context */}
+            <div className="relative flex min-h-screen flex-col">
+              <Header /> { /* Use the actual Header component */}
+              <main className="flex-1 container py-6">{children}</main>
+            </div>
+          </AstRegistryProvider>
         </WebContainerProvider>
       </body>
     </html>

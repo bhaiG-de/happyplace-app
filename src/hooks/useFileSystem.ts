@@ -1,79 +1,77 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useWebContainer } from './useWebContainer';
-import { FileSystemTree, BufferEncoding } from '@webcontainer/api';
+import { useWebContainerContext } from '@/context/WebContainerContext';
+import { FileSystemTree, BufferEncoding, IFSWatcher } from '@webcontainer/api';
 
 export type FileChangeEvent = {
   type: 'change' | 'rename' | 'delete';
   filename: string;
 };
 
+export type WatcherInstance = IFSWatcher;
+
 export function useFileSystem() {
-  const { webcontainerInstance: webcontainer } = useWebContainer();
+  const { webcontainerInstance, isLoading: isWebContainerLoading } = useWebContainerContext();
   const [isReady, setIsReady] = useState(false);
 
-  // Initialize file system
   useEffect(() => {
-    if (webcontainer) {
+    if (webcontainerInstance && !isWebContainerLoading) {
       setIsReady(true);
+    } else {
+      setIsReady(false);
     }
-  }, [webcontainer]);
+  }, [webcontainerInstance, isWebContainerLoading]);
 
-  // Mount files to the container
   const mount = useCallback(
     async (files: FileSystemTree, mountPoint?: string) => {
-      if (!webcontainer) throw new Error('WebContainer not initialized');
-      await webcontainer.mount(files, mountPoint ? { mountPoint } : undefined);
+      if (!webcontainerInstance) throw new Error('WebContainer not initialized (useFileSystem:mount)');
+      await webcontainerInstance.mount(files, mountPoint ? { mountPoint } : undefined);
     },
-    [webcontainer]
+    [webcontainerInstance]
   );
 
-  // Read file contents
   const readFile = useCallback(
     async (path: string, encoding: BufferEncoding = 'utf-8') => {
-      if (!webcontainer) throw new Error('WebContainer not initialized');
-      return webcontainer.fs.readFile(path, encoding);
+      if (!webcontainerInstance) throw new Error('WebContainer not initialized (useFileSystem:readFile)');
+      return webcontainerInstance.fs.readFile(path, encoding);
     },
-    [webcontainer]
+    [webcontainerInstance]
   );
 
-  // Write file contents
   const writeFile = useCallback(
     async (path: string, content: string | Uint8Array) => {
-      if (!webcontainer) throw new Error('WebContainer not initialized');
-      await webcontainer.fs.writeFile(path, content);
+      if (!webcontainerInstance) throw new Error('WebContainer not initialized (useFileSystem:writeFile)');
+      await webcontainerInstance.fs.writeFile(path, content);
     },
-    [webcontainer]
+    [webcontainerInstance]
   );
 
-  // Create directory
   const mkdir = useCallback(
     async (path: string, options: { recursive: true } = { recursive: true }) => {
-      if (!webcontainer) throw new Error('WebContainer not initialized');
-      await webcontainer.fs.mkdir(path, options);
+      if (!webcontainerInstance) throw new Error('WebContainer not initialized (useFileSystem:mkdir)');
+      await webcontainerInstance.fs.mkdir(path, options);
     },
-    [webcontainer]
+    [webcontainerInstance]
   );
 
-  // Remove file or directory
   const rm = useCallback(
     async (path: string, options?: { recursive?: boolean; force?: boolean }) => {
-      if (!webcontainer) throw new Error('WebContainer not initialized');
-      await webcontainer.fs.rm(path, options);
+      if (!webcontainerInstance) throw new Error('WebContainer not initialized (useFileSystem:rm)');
+      await webcontainerInstance.fs.rm(path, options);
     },
-    [webcontainer]
+    [webcontainerInstance]
   );
 
-  // Watch directory for changes
   const watchDirectory = useCallback(
-    (path: string, callback: (event: FileChangeEvent) => void) => {
-      if (!webcontainer) throw new Error('WebContainer not initialized');
-      return webcontainer.fs.watch(path, { recursive: true }, (event: string, filename: string | Uint8Array) => {
+    (path: string, callback: (event: FileChangeEvent) => void): WatcherInstance => {
+      if (!webcontainerInstance) throw new Error('WebContainer not initialized (useFileSystem:watchDirectory)');
+      
+      return webcontainerInstance.fs.watch(path, { recursive: true }, (event: string, filename: string | Uint8Array) => {
         if (typeof filename === 'string') {
           callback({ type: event as FileChangeEvent['type'], filename });
         }
       });
     },
-    [webcontainer]
+    [webcontainerInstance]
   );
 
   return {

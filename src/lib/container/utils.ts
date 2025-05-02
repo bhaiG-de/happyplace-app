@@ -82,4 +82,38 @@ export function convertGitHubFilesToFsTree(
   }
 
   return tree;
-} 
+}
+
+// Re-added buildSandboxFileSystemTree function
+/**
+ * Builds the complete FileSystemTree for the sandbox environment,
+ * combining the user project files and the preview app structure.
+ * 
+ * @param userProjectTree - The FileSystemTree representing the fetched user project.
+ * @returns The complete FileSystemTree to be mounted at '/'.
+ */
+export function buildSandboxFileSystemTree(userProjectTree: FileSystemTree): FileSystemTree {
+    console.log("Building sandbox file system tree...");
+    // We only need a placeholder for preview-app now, 
+    // as create-vite will populate it later.
+    const previewAppPlaceholder = { directory: {} }; 
+    console.log("Using placeholder for preview app tree.");
+
+    const finalTree: FileSystemTree = {
+      sandbox: {
+        directory: {
+          'user-project': { directory: userProjectTree },
+          'preview-app': previewAppPlaceholder // Mount an empty dir for preview
+        }
+      }
+    };
+    console.log("Final sandbox tree structure created.");
+    return finalTree;
+}
+
+// REMOVED buildSandboxFileSystemTree function
+/*
+export function buildSandboxFileSystemTree(userProjectTree: FileSystemTree): FileSystemTree {
+    // ... implementation removed ...
+}
+*/ 

@@ -5,10 +5,14 @@ import { CodeEditor } from '@/components/code/Editor';
 import { useFileSystem } from '@/hooks/useFileSystem';
 import { useWebContainerContext } from '@/context/WebContainerContext';
 import { useState, useEffect, useCallback } from 'react';
-import { FileTree, FileSystemTree, FileNode, DirectoryNode, SymlinkNode } from '@/components/core/FileTree';
+import { FileTree, FileSystemTree} from '@/components/core/FileTree'; // Removed unused isFileNode import
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ComponentPreview } from '@/components/preview/ComponentPreview';
 import { FileSystemAPI, DirEnt } from '@webcontainer/api';
 import type { editor } from 'monaco-editor'; // Import the monaco editor type
+import { useAstRegistry } from '@/hooks/useAstRegistry'; // Import AST hook
+import { ResizablePanel } from '@/components/ui/resizable-panel';
+import { PanelGroup } from "react-resizable-panels"; // Import PanelGroup directly
 
 async function buildFileSystemTree(fs: FileSystemAPI, path: string): Promise<FileSystemTree> {
   const entries = await fs.readdir(path, { withFileTypes: true });
@@ -32,109 +36,75 @@ async function buildFileSystemTree(fs: FileSystemAPI, path: string): Promise<Fil
   return tree;
 }
 
-// Helper to check if a path points to a file in the FileSystemTree
-function isFileNode(tree: FileSystemTree, path: string): boolean {
-  const parts = path.replace(/^\/project\//, '').split('/');
-  let currentNode: FileSystemTree | FileNode | DirectoryNode | SymlinkNode | undefined = tree;
-
-  for (const part of parts) {
-    if (!currentNode || typeof currentNode !== 'object' || Array.isArray(currentNode)) {
-      return false; // Invalid path or structure
-    }
-
-    if ('directory' in currentNode) {
-      currentNode = (currentNode as DirectoryNode).directory[part];
-    } else if (typeof currentNode === 'object' && part in currentNode) {
-       // We are at the root level or traversing
-      currentNode = (currentNode as FileSystemTree)[part];
-    } else {
-      return false; // Part not found
-    }
-  }
-
-  return !!currentNode && 'file' in currentNode;
-}
-
 export default function InstancePage() {
-  const { isMounted, webcontainerInstance } = useWebContainerContext();
-  const { readFile, isReady } = useFileSystem();
+  const { isMounted: isContainerBooted, webcontainerInstance } = useWebContainerContext();
+  const { readFile, isReady: isFileSystemReady } = useFileSystem();
+  const { isPreviewAppSetup, previewUrl, error: astError, isLoading: isAstLoading } = useAstRegistry();
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState<string>('// Select a file to view its content');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
   const [tab, setTab] = useState<'code' | 'design'>('code');
   const [fsTree, setFsTree] = useState<FileSystemTree>({});
-  const [error, setError] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
-  // Fetch the file system tree from WebContainer (/project is the root)
+  // Fetch the file system tree from WebContainer (user project is now at /sandbox/user-project)
   useEffect(() => {
     async function fetchTree() {
-      if (isReady && isMounted && webcontainerInstance) {
+      if (webcontainerInstance && isFileSystemReady) {
         try {
-          console.log("Fetching file tree...");
-          const tree = await buildFileSystemTree(webcontainerInstance.fs, '/project');
+          console.log("Fetching file tree from /sandbox/user-project (Instance ready)...");
+          const tree = await buildFileSystemTree(webcontainerInstance.fs, '/sandbox/user-project'); // Updated path
           setFsTree(tree);
           console.log("File tree fetched successfully");
         } catch (err) {
           console.error("Error fetching file tree:", err);
-          setError("Failed to load file structure.");
+          setFileError("Failed to load file structure.");
           setFsTree({});
         }
+      } else {
+        console.log(`Skipping fetchTree: webcontainerInstance=${!!webcontainerInstance}, isFileSystemReady=${isFileSystemReady}`);
       }
     }
     fetchTree();
-  }, [isReady, isMounted, webcontainerInstance]);
+  }, [webcontainerInstance, isFileSystemReady]);
 
-  useEffect(() => {
-    if (isMounted && !selectedFilePath) {
-      // Default to main.tsx
-      setSelectedFilePath('/project/src/main.tsx');
-    }
-  }, [isMounted, selectedFilePath]);
-
-  useEffect(() => {
-    if (selectedFilePath && isMounted) {
-      // Check if the selected path is a file before attempting to read
-      if (!isFileNode(fsTree, selectedFilePath)) {
-        setEditorContent('// Select a file to view its content');
-        setIsLoading(false); // Not loading if it's a directory
-        setError(null); // Clear previous errors
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-      console.log(`Reading file: ${selectedFilePath}`);
-      
-      readFile(selectedFilePath)
-        .then((content: string | Uint8Array) => {
-          console.log(`File read successful, content type: ${typeof content}`);
-          if (typeof content === 'string') {
-            setEditorContent(content);
-          } else if (content instanceof Uint8Array) {
-            const decoder = new TextDecoder();
-            setEditorContent(decoder.decode(content));
-          } else {
-            setEditorContent('// Unable to display content');
-          }
-        })
-        .catch((error) => {
-          console.error(`Error reading file ${selectedFilePath}:`, error);
-          setError(error.message || String(error));
-          setEditorContent(`// Error: ${error.message || String(error)}`);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    } else if (!selectedFilePath) {
-      setEditorContent('// Select a file to view its content');
-    }
-  }, [selectedFilePath, isMounted, readFile, fsTree]);
-
-  const handleFileSelect = useCallback((path: string) => {
+  const handleFileSelect = useCallback(async (path: string) => {
     console.log(`File selected: ${path}`);
     setSelectedFilePath(path);
-    setTab('code');
-  }, []);
+    if (path && webcontainerInstance && isFileSystemReady) {
+      setIsLoadingFile(true);
+      setEditorContent('// Loading file...');
+      setFileError(null);
+      try {
+        console.log(`Reading file: ${path}`);
+        // Ensure readFile hook uses the correct instance provided by context
+        const content = await readFile(path); 
+        console.log(`File read successful, content type: ${typeof content}`);
+        setEditorContent(content);
+      } catch (err: unknown) {
+        console.error(`Error reading file ${path}:`, err);
+        // Type check for error message
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setEditorContent(`// Error loading file: ${errorMessage}`);
+        setFileError(`Failed to read file: ${errorMessage}`);
+      } finally {
+        setIsLoadingFile(false);
+      }
+    } else if (!path) {
+        setSelectedFilePath(null);
+        setEditorContent('// No file selected');
+    } else {
+        console.warn('Cannot read file: WebContainer or file system not ready.');
+        setEditorContent('// WebContainer not ready');
+    }
+  }, [webcontainerInstance, isFileSystemReady, readFile]);
+
+  // Load initial file content when selectedFilePath changes
+  useEffect(() => {
+    if (selectedFilePath) {
+      handleFileSelect(selectedFilePath);
+    }
+  }, [selectedFilePath, handleFileSelect]); // Depend on handleFileSelect ensures it has latest context
 
   // Type for Monaco Editor's onChange handler
   type MonacoOnChange = (value: string | undefined, ev: editor.IModelContentChangedEvent) => void;
@@ -151,9 +121,9 @@ export default function InstancePage() {
   
   return (
     <div className="flex h-screen flex-col">
-      {error && (
-        <div className="bg-red-500 text-white p-2 text-sm">
-          Error: {error}
+      {(fileError || astError) && (
+        <div className="bg-red-500 text-white p-2 text-sm z-20 relative">
+          Error: {fileError || (astError?.message ?? 'Unknown error')}
         </div>
       )}
       <div className="flex flex-1 overflow-hidden">
@@ -163,7 +133,7 @@ export default function InstancePage() {
             tree={fsTree}
             selectedPath={selectedFilePath}
             onSelect={handleFileSelect}
-            basePath="/project" // Set base path to match readFile logic
+            basePath="/sandbox/user-project" // Update base path to the correct user project root
           />
         </aside>
         {/* Main Content */}
@@ -180,12 +150,30 @@ export default function InstancePage() {
                 path={filename} // Use just the filename for model identification
                 value={editorContent}
                 onChange={handleEditorChange}
-                options={{ readOnly: !isMounted || !selectedFilePath || isLoading }}
+                options={{ readOnly: !isContainerBooted || !selectedFilePath || isLoadingFile }}
                 theme="vs-dark"
               />
             </TabsContent>
-            <TabsContent value="design" className="flex-1 flex items-center justify-center">
-              <div className="text-muted-foreground">Design Canvas Preview (coming soon)</div>
+            <TabsContent value="design" className="flex-1 flex flex-col p-0 m-0">
+                <div className="p-2 border-b bg-background flex items-center space-x-2">
+                    <span className="text-xs text-muted-foreground">
+                        { !isContainerBooted ? 'Booting Container...' :
+                          isAstLoading ? 'Parsing Files...' :
+                          !isPreviewAppSetup ? 'Setting up preview environment...' :
+                          !previewUrl ? 'Starting preview server...' :
+                          'Preview server running.' }
+                    </span>
+                    {previewUrl && (
+                         <span className="text-xs text-muted-foreground">Previewing at: <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="underline">{previewUrl}</a></span>
+                     )}
+                </div>
+               <PanelGroup direction="horizontal" className="flex-1">
+                 <ResizablePanel defaultSize={50}>
+                   <div className="h-full p-4 bg-background">
+                     <ComponentPreview />
+                   </div>
+                 </ResizablePanel>
+               </PanelGroup>
             </TabsContent>
           </Tabs>
         </main>

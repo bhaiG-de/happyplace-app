@@ -7,62 +7,74 @@ import { Button } from "@/components/shared/Button";
 // import { CodeEditor } from "@/components/code/Editor"; // Removed unused import
 import { Github } from 'lucide-react';
 import { parseGitHubUrl } from '@/lib/utils';
-import { fetchRepoContents /*, GitHubFile*/ } from '@/lib/github/repo'; // Removed unused GitHubFile type
+import { fetchRepoContents, GitHubFile } from '@/lib/github/repo'; // Re-added fetchRepoContents
+import { convertGitHubFilesToFsTree, buildSandboxFileSystemTree } from '@/lib/container/utils'; // Re-added buildSandboxFileSystemTree
 import { useWebContainerContext } from '@/context/WebContainerContext'; // Import context hook
-import { convertGitHubFilesToFsTree } from '@/lib/container/utils'; // Import the converter
 
 export default function Home() {
   const router = useRouter();
-  const { setFilesToMount } = useWebContainerContext(); // Get the function from context
+  // Get the reverted bootAndMountFiles function
+  const { bootAndMountFiles, isLoading: isContextLoading, loadingMessage, error: contextError } = useWebContainerContext(); 
   const [githubUrl, setGithubUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // No longer need local state for loadedFiles or selectedFile here if navigating immediately
-  // const [loadedFiles, setLoadedFiles] = useState<GitHubFile[] | null>(null);
-  // const [selectedFile, setSelectedFile] = useState<GitHubFile | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isFetchingRepo, setIsFetchingRepo] = useState(false); // Local state for fetch step
+
+  // Combine errors for display
+  const displayError = localError || (contextError ? `Error: ${contextError.message}` : null);
+  // Combine loading states
+  const isLoading = isFetchingRepo || isContextLoading;
+  // Determine display message
+  const displayLoadingMessage = isFetchingRepo ? 'Fetching Repo...' : (loadingMessage || 'Loading...');
 
   const handleLoadRepo = async () => {
-    setIsLoading(true);
-    setError(null);
-    // Reset context files in case of previous error?
-    // setFilesToMount(null); 
-    console.log('Attempting to load repo from:', githubUrl);
+    setLocalError(null);
+    setIsFetchingRepo(true); // Start fetching repo
+    console.log(`Attempting to load repo from: ${githubUrl}`);
 
-    const repoInfo = parseGitHubUrl(githubUrl);
-
-    if (!repoInfo) {
-      setError('Invalid GitHub URL format.');
-      setIsLoading(false);
+    const parsedUrl = parseGitHubUrl(githubUrl);
+    if (!parsedUrl) {
+      setLocalError('Invalid GitHub URL format. Use https://github.com/owner/repo');
+      setIsFetchingRepo(false);
       return;
     }
 
     try {
       // 1. Fetch files from GitHub
-      const files = await fetchRepoContents(repoInfo.owner, repoInfo.repo, repoInfo.branch);
-      console.log(`Successfully fetched ${files.length} items from ${repoInfo.owner}/${repoInfo.repo}`);
-      
-      // 2. Convert to FileSystemTree
-      const fileSystemTree = convertGitHubFilesToFsTree(files);
-      console.log('Converted fetched files to FileSystemTree structure.');
+      console.log('Fetching repo contents...');
+      const files: GitHubFile[] = await fetchRepoContents(parsedUrl.owner, parsedUrl.repo, parsedUrl.branch);
+      console.log(`Successfully fetched ${files.length} items from ${parsedUrl.owner}/${parsedUrl.repo}`);
+      setIsFetchingRepo(false); // Finished fetching repo part
 
-      // 3. Set files in context for the hook to mount
-      setFilesToMount(fileSystemTree);
+      // 2. Convert user files to FileSystemTree
+      const userProjectTree = convertGitHubFilesToFsTree(files);
+      console.log('Converted fetched files to user project FileSystemTree structure.');
 
-      // 4. Generate instance ID (temporary)
-      const instanceId = `${repoInfo.owner}-${repoInfo.repo}-${Date.now()}`;
-      
-      // 5. Navigate to the instance page
+      // 3. Build the complete sandbox FileSystemTree (with preview placeholder)
+      const sandboxTree = buildSandboxFileSystemTree(userProjectTree);
+
+      // 4. Boot WebContainer AND Mount the combined tree
+      console.log('Calling bootAndMountFiles with combined sandbox tree...');
+      await bootAndMountFiles(sandboxTree); // Wait for boot and mount to complete
+      console.log('bootAndMountFiles completed successfully (or handled error internally).');
+
+      // Check for errors from the context after the operation
+      if (contextError) {
+          console.error("Error occurred during boot/mount:", contextError);
+          return; // Stop further execution
+      }
+
+      // 5. Navigate 
+      const instanceId = `${parsedUrl.owner}-${parsedUrl.repo}-${Date.now()}`;
       console.log(`Navigating to instance: /instance/${instanceId}`);
       router.push(`/instance/${instanceId}`);
-      // Note: isLoading will be reset when the component unmounts upon navigation
 
-    } catch (err) {
-      console.error('Error loading repo or setting files:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred.';
-      setError(`Failed to load repository: ${errorMessage}`);
-      setIsLoading(false); // Ensure loading stops on error
+    } catch (err: unknown) {
+      console.error('Error during loading process:', err);
+      const message = err instanceof Error ? err.message : 'An unknown error occurred';
+      setLocalError(`Failed to load repository: ${message}`);
+      setIsFetchingRepo(false); // Ensure fetch loading state is reset on error
+      // Context isLoading will be handled by the hook's finally block
     }
-    // No finally block needed for setIsLoading(false) if navigating away on success
   };
 
   return (
@@ -77,18 +89,20 @@ export default function Home() {
             onChange={(e) => setGithubUrl(e.target.value)}
             icon={<Github size={16} />}
             iconPosition="left"
-            disabled={isLoading}
-            error={error || undefined}
+            disabled={isLoading} // Use combined loading state
+            error={displayError || undefined} // Use combined error state
           />
           <Button 
             onClick={handleLoadRepo} 
-            disabled={isLoading || !githubUrl}
+            disabled={isLoading || !githubUrl} // Use combined loading state
             className="whitespace-nowrap"
           >
-            {isLoading ? 'Loading...' : 'Load Repo'}
+            {/* Use combined loading message */} 
+            {isLoading ? displayLoadingMessage : 'Load Repo'}
           </Button>
         </div>
-        {/* Removed preview editor and file list display from Home page */}
+        {/* Optional: Display detailed loading message */} 
+        {/* {isLoading && loadingMessage && <p className="text-sm text-muted-foreground">{loadingMessage}</p>} */}
       </div>
     </div>
   );

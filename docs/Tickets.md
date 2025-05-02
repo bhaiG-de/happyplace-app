@@ -55,14 +55,25 @@
 
 | ID | Ticket | Status |
 |----|--------|--------|
-| **P3‑01** | Copy `tree-sitter-javascript.wasm` & `tree-sitter-tsx.wasm` into `/public/wasm/tree-sitter` | ☐ |
-| **P3‑02** | `getParser(ext)` helper in `src/lib/ast/parser.ts` | ☐ |
-| **P3‑03** | `useAstRegistry` hook + context (`src/hooks/useAstRegistry.ts`, `src/context/AppContext.tsx`?) | ☐ |
-| **P3‑04** | `discoverSourceFiles()` util (recursive) (potentially in `src/lib/ast/traversal.ts`) | ☐ |
-| **P3‑05** | Initial parse of all source files -> registry (Uses `parser.ts`, `traversal.ts`, state in `useAstRegistry.ts`) | ☐ |
+| **P3‑01** | Copy `tree-sitter-javascript.wasm` & `tree-sitter-tsx.wasm` into `/public/wasm/tree-sitter` | ☑ |
+| **P3‑02** | `getParser(ext)` helper in `src/lib/ast/parser.ts` | ☑ |
+| **P3‑03** | `useAstRegistry` hook + context (`src/hooks/useAstRegistry.ts`, `src/context/AppContext.tsx`?) | ☑ |
+| **P3‑04** | `discoverSourceFiles()` util (recursive) (potentially in `src/lib/ast/traversal.ts`) | ☑ |
+| **P3‑05** | Initial parse of all source files -> registry (Uses `parser.ts`, `traversal.ts`, state in `useAstRegistry.ts`) | ☑ |
 | **P3‑06** | Hook registry (`useAstRegistry.ts`) to `useFileWatcher` (`useFileSystem.ts`) for incremental updates | ☐ |
-| **P3‑07** | `componentMapGenerator.ts` (export `componentMap` + `inverseMap`) in `src/lib/ast/componentMapGenerator.ts` | ☐ |
+| **P3‑07** | `componentMapGenerator.ts` (export `componentMap` + `inverseMap`) in `src/lib/ast/componentMapGenerator.ts` | ☑ |
 | **P3‑08** | Unit tests: parser bootstrap, anonymous export fallback, map refresh (Tests for `src/lib/ast/`) | ☐ |
+
+**Progress Notes:**
+- ✅ Implemented `parser.ts` with `initializeParser`, `getParser`, `parseSource`, handling WASM loading and language caching.
+- ✅ Implemented `traversal.ts` with `discoverSourceFiles` to recursively find source files in the VFS.
+- ✅ Created `AstRegistryContext.tsx` and `useAstRegistry.ts` hook.
+- ✅ Provider performs initial scan/parse of discovered files into the registry.
+- ✅ Integrated `AstRegistryProvider` into root layout.
+- ✅ Hooked AST registry (`AstRegistryContext`) to file watcher (`useFileSystem`) for incremental updates (P3-06).
+- ✅ Implemented `componentMapGenerator.ts` using Tree-sitter queries to find default exports and build component/inverse maps (P3-07).
+- **Note:** Unit tests (P3-08) require manual setup of a testing environment (e.g., Vitest) and mocks for WebContainer/Tree-sitter APIs.
+- **Note:** File watcher integration includes a workaround (`as any`) for potential type mismatches in `@webcontainer/api` watcher disposal.
 
 ---
 
@@ -70,13 +81,22 @@
 
 | ID | Ticket | Status |
 |----|--------|--------|
-| **P4‑01** | Remove legacy map‑build logic; import from `src/lib/ast/componentMapGenerator.ts` | ☐ |
-| **P4‑02** | Generate `/preview-app` scaffold & alias `@user-project` (using `src/lib/container/filesystem.ts`, `process.ts`) | ☐ |
-| **P4‑03** | Write dynamic `componentMap.js` into `/preview-app/src` (using `componentMapGenerator.ts` output and `filesystem.ts`) | ☐ |
-| **P4‑04** | `PreviewLoader.tsx` – dynamic import via URL query (in `/preview-app/src/PreviewLoader.tsx`) | ☐ |
-| **P4‑05** | Iframe wrapper `src/components/preview/ComponentPreview.tsx` (uses `inverseMap` from `componentMapGenerator.ts`) | ☐ |
-| **P4‑06** | **NEW:** postMessage listener for `componentMapUpdated` -> reload iframe (in `ComponentPreview.tsx`) | ☐ |
+| **P4‑01** | Remove legacy map‑build logic; import from `src/lib/ast/componentMapGenerator.ts` | ☑ |
+| **P4‑02** | Generate `/preview-app` scaffold & alias `@user-project` (using `src/lib/container/filesystem.ts`, `process.ts`) | ☑ |
+| **P4‑03** | Write dynamic `componentMap.js` into `/preview-app/src` (using `componentMapGenerator.ts` output and `filesystem.ts`) | ☑ |
+| **P4‑04** | `PreviewLoader.tsx` – dynamic import via URL query (in `/preview-app/src/PreviewLoader.tsx`) | ☑ |
+| **P4‑05** | Iframe wrapper `src/components/preview/ComponentPreview.tsx` (uses `inverseMap` from `componentMapGenerator.ts`) | ☑ |
+| **P4‑06** | **NEW:** postMessage listener for `componentMapUpdated` -> reload iframe (in `ComponentPreview.tsx`) | ☑ |
 | **P4‑07** | Verify Vite HMR when code edits occur | ☐ |
+
+**Progress Notes:**
+- ✅ Confirmed reliance on Phase 3 `componentMapGenerator.ts` (P4-01).
+- ✅ Implemented `setupPreviewApp` function (`src/lib/preview/setup.ts`) to generate `/preview-app` VFS structure, Vite config, base files (P4-02).
+- ✅ `setupPreviewApp` dynamically generates `/preview-app/src/componentMap.js` using AST registry output (P4-03).
+- ✅ Implemented `PreviewLoader.tsx` (within `setupPreviewApp`) to load components dynamically based on URL query param `?componentName=` using the generated `componentMap.js` (P4-04).
+- ✅ Created `ComponentPreview.tsx` iframe wrapper component in the main app (`src/components/preview/`) which uses `inverseMap` from `useAstRegistry` to determine the component name and set the iframe `src` (P4-05).
+- ✅ Added `postMessage` listener to `ComponentPreview.tsx` to handle `componentMapUpdated` events and trigger iframe reload via key change (P4-06).
+- **Note:** Integration points (calling `setupPreviewApp`, posting `componentMapUpdated`, running Vite server, displaying `ComponentPreview`) and HMR verification (P4-07) are pending.
 
 ---
 

@@ -1,15 +1,17 @@
 'use client'; // Mark this as a Client Component
 
-import { createContext, useContext, ReactNode } from 'react';
-import { WebContainer, FileSystemTree } from '@webcontainer/api';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { WebContainer, FileSystemTree } from '@webcontainer/api'; // Added back FileSystemTree
 import { useWebContainer } from '../hooks/useWebContainer';
 
-interface WebContainerContextType {
+// Define the shape of the context data
+export interface WebContainerContextType {
   webcontainerInstance: WebContainer | null;
-  isBooting: boolean;
+  isLoading: boolean;
   isMounted: boolean;
   error: Error | null;
-  setFilesToMount: (files: FileSystemTree | null) => void;
+  loadingMessage?: string; // Add optional loading message
+  bootAndMountFiles: (finalTree: FileSystemTree) => Promise<void>; // Updated function name back
 }
 
 const WebContainerContext = createContext<WebContainerContextType | null>(null);
@@ -23,10 +25,11 @@ export function WebContainerProvider({ children }: WebContainerProviderProps) {
 
   const contextValue: WebContainerContextType = {
     webcontainerInstance: webContainerState.webcontainerInstance,
-    isBooting: webContainerState.isBooting,
+    isLoading: webContainerState.isLoading,
     isMounted: webContainerState.isMounted,
     error: webContainerState.error,
-    setFilesToMount: webContainerState.setFilesToMount,
+    loadingMessage: webContainerState.loadingMessage,
+    bootAndMountFiles: webContainerState.bootAndMountFiles, // Use updated function name back
   };
 
   return (
