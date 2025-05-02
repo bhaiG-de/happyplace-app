@@ -1,183 +1,166 @@
 'use client';
 
-// import { WebContainerProvider } from '@/context/WebContainerContext'; // Removed unused provider
-import { CodeEditor } from '@/components/code/Editor';
-import { useFileSystem } from '@/hooks/useFileSystem';
-import { useWebContainerContext } from '@/context/WebContainerContext';
-import { useState, useEffect, useCallback } from 'react';
-import { FileTree, FileSystemTree} from '@/components/core/FileTree'; // Removed unused isFileNode import
+import { useState, useEffect, use } from 'react';
+import { 
+  SandpackProvider, 
+  SandpackCodeEditor, 
+  SandpackPreview, 
+  SandpackFileExplorer,
+  // useSandpack, // Removed unused import
+  SandpackFiles
+} from "@codesandbox/sandpack-react";
+// import { githubDark } from "@codesandbox/sandpack-themes"; // Removed theme import
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ComponentPreview } from '@/components/preview/ComponentPreview';
-import { FileSystemAPI, DirEnt } from '@webcontainer/api';
-import type { editor } from 'monaco-editor'; // Import the monaco editor type
-import { useAstRegistry } from '@/hooks/useAstRegistry'; // Import AST hook
-import { ResizablePanel } from '@/components/ui/resizable-panel';
-import { PanelGroup } from "react-resizable-panels"; // Import PanelGroup directly
+// import { useAstRegistry } from '@/hooks/useAstRegistry';
+import { 
+  ResizablePanelGroup, 
+  ResizablePanel, 
+  ResizableHandle 
+} from '@/components/ui/resizable';
+// import { PanelGroup } from "react-resizable-panels"; // Removed direct import
+import { fetchRepoDataForSandpack, DetectedSandpackTemplate } from '@/lib/github/repo'; // Import the type too
 
-async function buildFileSystemTree(fs: FileSystemAPI, path: string): Promise<FileSystemTree> {
-  const entries = await fs.readdir(path, { withFileTypes: true });
-  const tree: FileSystemTree = {};
-  for (const entry of entries) {
-    const entryPath = path === '/' ? `/${entry.name}` : `${path}/${entry.name}`;
-    if (entry.isDirectory()) {
-      tree[entry.name] = {
-        directory: await buildFileSystemTree(fs, entryPath),
-      };
-    } else if (entry.isFile()) {
-      tree[entry.name] = {
-        file: { contents: '' }, // contents not loaded here
-      };
-    } else if ('isSymbolicLink' in entry && entry.isSymbolicLink && (entry as DirEnt<string> & { isSymbolicLink: () => boolean }).isSymbolicLink()) {
-      tree[entry.name] = {
-        symlink: entryPath,
-      };
-    }
-  }
-  return tree;
+// Removed buildFileSystemTree and related WebContainer/FileSystem imports
+
+// Simple Editor Wrapper (can be expanded for Monaco)
+function InstanceEditor() {
+  // const { code, updateCode } = useActiveCode(); // Hooks available if needed
+  return <SandpackCodeEditor showLineNumbers showTabs />;
 }
 
-export default function InstancePage() {
-  const { isMounted: isContainerBooted, webcontainerInstance } = useWebContainerContext();
-  const { readFile, isReady: isFileSystemReady } = useFileSystem();
-  const { isPreviewAppSetup, previewUrl, error: astError, isLoading: isAstLoading } = useAstRegistry();
-  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [editorContent, setEditorContent] = useState<string>('// Select a file to view its content');
-  const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
-  const [tab, setTab] = useState<'code' | 'design'>('code');
-  const [fsTree, setFsTree] = useState<FileSystemTree>({});
-  const [fileError, setFileError] = useState<string | null>(null);
+// Inner component to access Sandpack context
+function SandpackLayoutAndAst({ initialTab }: { initialTab: 'code' | 'design' }) {
+  // const { sandpack } = useSandpack(); // Get sandpack state - Not needed if not using AST
+  // const { files } = sandpack; // Extract files state - Not needed if not using AST
 
-  // Fetch the file system tree from WebContainer (user project is now at /sandbox/user-project)
-  useEffect(() => {
-    async function fetchTree() {
-      if (webcontainerInstance && isFileSystemReady) {
-        try {
-          console.log("Fetching file tree from /sandbox/user-project (Instance ready)...");
-          const tree = await buildFileSystemTree(webcontainerInstance.fs, '/sandbox/user-project'); // Updated path
-          setFsTree(tree);
-          console.log("File tree fetched successfully");
-        } catch (err) {
-          console.error("Error fetching file tree:", err);
-          setFileError("Failed to load file structure.");
-          setFsTree({});
-        }
-      } else {
-        console.log(`Skipping fetchTree: webcontainerInstance=${!!webcontainerInstance}, isFileSystemReady=${isFileSystemReady}`);
-      }
-    }
-    fetchTree();
-  }, [webcontainerInstance, isFileSystemReady]);
+  // Removed useAstRegistry hook call
 
-  const handleFileSelect = useCallback(async (path: string) => {
-    console.log(`File selected: ${path}`);
-    setSelectedFilePath(path);
-    if (path && webcontainerInstance && isFileSystemReady) {
-      setIsLoadingFile(true);
-      setEditorContent('// Loading file...');
-      setFileError(null);
-      try {
-        console.log(`Reading file: ${path}`);
-        // Ensure readFile hook uses the correct instance provided by context
-        const content = await readFile(path); 
-        console.log(`File read successful, content type: ${typeof content}`);
-        setEditorContent(content);
-      } catch (err: unknown) {
-        console.error(`Error reading file ${path}:`, err);
-        // Type check for error message
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setEditorContent(`// Error loading file: ${errorMessage}`);
-        setFileError(`Failed to read file: ${errorMessage}`);
-      } finally {
-        setIsLoadingFile(false);
-      }
-    } else if (!path) {
-        setSelectedFilePath(null);
-        setEditorContent('// No file selected');
-    } else {
-        console.warn('Cannot read file: WebContainer or file system not ready.');
-        setEditorContent('// WebContainer not ready');
-    }
-  }, [webcontainerInstance, isFileSystemReady, readFile]);
+  const [tab, setTab] = useState<'code' | 'design'>(initialTab);
 
-  // Load initial file content when selectedFilePath changes
-  useEffect(() => {
-    if (selectedFilePath) {
-      handleFileSelect(selectedFilePath);
-    }
-  }, [selectedFilePath, handleFileSelect]); // Depend on handleFileSelect ensures it has latest context
-
-  // Type for Monaco Editor's onChange handler
-  type MonacoOnChange = (value: string | undefined, ev: editor.IModelContentChangedEvent) => void;
-
-  const handleEditorChange: MonacoOnChange = useCallback((value) => {
-    if (value !== undefined) {
-      setEditorContent(value);
-      // Add debounced saving logic here if needed
-    }
-  }, []);
-
-  // Extract filename from path for display purposes
-  const filename = selectedFilePath ? selectedFilePath.split('/').pop() : 'untitled';
-  
   return (
     <div className="flex h-screen flex-col">
-      {(fileError || astError) && (
-        <div className="bg-red-500 text-white p-2 text-sm z-20 relative">
-          Error: {fileError || (astError?.message ?? 'Unknown error')}
-        </div>
-      )}
+      {/* Removed AST Error Display */}
       <div className="flex flex-1 overflow-hidden">
-        {/* FileTree Navigation */}
-        <aside className="w-64 border-r bg-muted p-2 overflow-y-auto">
-          <FileTree
-            tree={fsTree}
-            selectedPath={selectedFilePath}
-            onSelect={handleFileSelect}
-            basePath="/sandbox/user-project" // Update base path to the correct user project root
-          />
+        <aside className="w-64 border-r bg-muted/40 p-1">
+          <SandpackFileExplorer />
         </aside>
-        {/* Main Content */}
         <main className="flex-1 flex flex-col">
           <Tabs value={tab} onValueChange={v => setTab(v as 'code' | 'design')} className="flex-1 flex flex-col">
             <TabsList className="border-b bg-background px-4 py-2">
               <TabsTrigger value="code">Code</TabsTrigger>
               <TabsTrigger value="design">Design</TabsTrigger>
             </TabsList>
-            <TabsContent value="code" className="flex-1 overflow-hidden">
-              <CodeEditor
-                height="100%"
-                language={selectedFilePath?.split('.').pop() === 'tsx' ? 'typescript' : 'plaintext'}
-                path={filename} // Use just the filename for model identification
-                value={editorContent}
-                onChange={handleEditorChange}
-                options={{ readOnly: !isContainerBooted || !selectedFilePath || isLoadingFile }}
-                theme="vs-dark"
-              />
+            <TabsContent value="code" className="flex-1 overflow-hidden m-0 p-0">
+              <InstanceEditor />
             </TabsContent>
             <TabsContent value="design" className="flex-1 flex flex-col p-0 m-0">
-                <div className="p-2 border-b bg-background flex items-center space-x-2">
-                    <span className="text-xs text-muted-foreground">
-                        { !isContainerBooted ? 'Booting Container...' :
-                          isAstLoading ? 'Parsing Files...' :
-                          !isPreviewAppSetup ? 'Setting up preview environment...' :
-                          !previewUrl ? 'Starting preview server...' :
-                          'Preview server running.' }
-                    </span>
-                    {previewUrl && (
-                         <span className="text-xs text-muted-foreground">Previewing at: <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="underline">{previewUrl}</a></span>
-                     )}
-                </div>
-               <PanelGroup direction="horizontal" className="flex-1">
-                 <ResizablePanel defaultSize={50}>
-                   <div className="h-full p-4 bg-background">
-                     <ComponentPreview />
-                   </div>
-                 </ResizablePanel>
-               </PanelGroup>
+              {/* Removed AST Status Message Display */}
+              <ResizablePanelGroup direction="horizontal" className="flex-1">
+                <ResizablePanel defaultSize={50} className="bg-background">
+                  <SandpackPreview showOpenInCodeSandbox={false} />
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={50}>
+                  <div className="h-full p-4 border-l flex items-center justify-center text-muted-foreground">
+                    {/* Removed AST Status Display */} Design Canvas / Inspector Area
+                  </div>
+                </ResizablePanel>
+              </ResizablePanelGroup>
             </TabsContent>
           </Tabs>
         </main>
       </div>
     </div>
+  );
+}
+
+// Main Page Component
+// Props type needs to reflect that params is a Promise
+type InstancePageProps = {
+  params: Promise<{ id: string }> 
+};
+
+export default function InstancePage(props: InstancePageProps) {
+  const params = use(props.params);
+  
+  const [files, setFiles] = useState<SandpackFiles | null>(null);
+  const [template, setTemplate] = useState<DetectedSandpackTemplate>('static');
+  const [isLoadingFiles, setIsLoadingFiles] = useState(true);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  // Fetch initial files and template from GitHub
+  useEffect(() => {
+    setIsLoadingFiles(true);
+    setFileError(null);
+
+    // Split the ID using the new separator '___'
+    const parts = params.id.split('___');
+    let owner: string | undefined;
+    let repo: string | undefined;
+
+    if (parts.length === 2) {
+      owner = parts[0];
+      repo = parts[1];
+    } else {
+      setFileError("Invalid instance ID format. Could not determine owner/repo from ID.");
+      setIsLoadingFiles(false);
+      setFiles(null);
+      return;
+    }
+
+    // Basic validation (can be improved)
+    if (!owner || !repo) {
+      setFileError("Invalid owner or repo derived from ID.");
+      setIsLoadingFiles(false);
+      setFiles(null);
+      return;
+    }
+
+    console.log(`Fetching files for ${owner}/${repo}...`);
+    fetchRepoDataForSandpack(owner, repo)
+      .then(({ files: fetchedFiles, template: detectedTemplate }) => {
+        console.log(`GitHub files fetched successfully. Template: ${detectedTemplate}`);
+        setFiles(fetchedFiles);
+        setTemplate(detectedTemplate || 'static');
+      })
+      .catch(err => {
+        console.error("Error fetching instance files:", err);
+        const message = err instanceof Error ? err.message : String(err);
+        setFileError(`Failed to load repository files: ${message}`);
+        setFiles(null);
+      })
+      .finally(() => {
+        setIsLoadingFiles(false);
+      });
+  }, [params.id]);
+
+  // Removed useAstRegistry call from here
+
+  if (isLoadingFiles) {
+    return <div className="flex h-screen items-center justify-center">Loading Repository Files...</div>;
+  }
+
+  if (fileError) { // Show only file loading error here
+    return <div className="flex h-screen items-center justify-center text-red-500">Error: {fileError}</div>;
+  }
+
+  if (!files) {
+     return <div className="flex h-screen items-center justify-center text-red-500">Error: Could not load files.</div>;
+  }
+  console.log(files);
+  return (
+    <SandpackProvider 
+      template={template}
+      files={files} 
+      theme="dark"
+      options={{ 
+        // bundlerURL: "https://sandpack-bundler.codesandbox.io", // Removing explicit URL
+        skipEval: false, // Ensure evaluation happens
+        activeFile: "/src/App.tsx" // Set a reasonable default active file
+      }}
+    >
+      {/* Render inner component that uses Sandpack context */}
+      <SandpackLayoutAndAst initialTab="code" /> 
+    </SandpackProvider>
   );
 } 

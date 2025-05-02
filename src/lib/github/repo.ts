@@ -1,4 +1,7 @@
 import { Octokit } from "octokit";
+import type { SandpackFiles } from "@codesandbox/sandpack-react";
+import { Sandpack } from "@codesandbox/sandpack-react";
+import React from 'react';
 
 // Initialize Octokit
 // Use environment variable for PAT if available, otherwise use unauthenticated requests
@@ -15,6 +18,13 @@ export interface GitHubFile {
   size?: number;
   url?: string; // URL to fetch blob content if needed
 }
+
+// Use React.ComponentProps to get the type of the props for the Sandpack component
+type SandpackProps = React.ComponentProps<typeof Sandpack>;
+
+// Extract the 'template' prop type from SandpackProps
+// This type includes all the valid template strings recognized by SandpackProvider
+export type DetectedSandpackTemplate = SandpackProps['template'];
 
 /**
  * Fetches the default branch name for a repository.
@@ -167,4 +177,101 @@ export async function fetchRepoContents(owner: string, repo: string, branch?: st
      }
    }
  }
+*/ 
+
+// --- Framework Detection Logic --- 
+
+function detectFrameworkFromPackageJson(pkgJsonContent: string | undefined): DetectedSandpackTemplate {
+    if (!pkgJsonContent) return 'static';
+
+    try {
+        const pkg = JSON.parse(pkgJsonContent);
+        const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+        // Add react-scripts check FIRST
+        if (allDeps['react-scripts']) return 'react';
+
+        // Other checks
+        if (allDeps.next) return 'nextjs'; 
+        if (allDeps.vite && allDeps.react && allDeps.typescript) return 'react-ts';
+        if (allDeps.vite && allDeps.react) return 'react';
+        if (allDeps.vite && allDeps.vue) return 'vue';
+        if (allDeps.vite) return 'vite'; 
+        if (allDeps['@angular/core']) return 'angular';
+        if (allDeps.svelte) return 'svelte';
+        // Generic react/vue checks are now lower priority than CRA
+        if (allDeps.react && allDeps.typescript) return 'react-ts'; 
+        if (allDeps.react) return 'react';
+        if (allDeps.vue) return 'vue';
+
+        if (Object.keys(allDeps).length > 0) return 'node';
+        return 'static';
+
+    } catch (error) {
+        console.error("Error parsing package.json for framework detection:", error);
+        return 'static';
+    }
+}
+
+
+// --- Function to fetch data and detect template --- 
+
+/**
+ * Fetches repository contents and formats them for Sandpack, detecting the template.
+ * @param owner Repository owner.
+ * @param repo Repository name.
+ * @param branch Optional branch/tag/commit SHA.
+ * @returns An object containing SandpackFiles and the detected template name.
+ */
+export async function fetchRepoDataForSandpack(
+    owner: string,
+    repo: string,
+    branch?: string
+): Promise<{ files: SandpackFiles; template: DetectedSandpackTemplate }> {
+    const repoContents = await fetchRepoContents(owner, repo, branch);
+
+    const sandpackFiles: SandpackFiles = {};
+    let pkgJsonContent: string | undefined = undefined;
+
+    for (const item of repoContents) {
+        if (item.type === 'blob' && item.path) {
+            const sandpackPath = item.path.startsWith('/') ? item.path : `/${item.path}`;
+            const content = item.content || '// Error: Content not fetched';
+            sandpackFiles[sandpackPath] = content;
+
+            if (sandpackPath === '/package.json') {
+                pkgJsonContent = content;
+            }
+        }
+    }
+
+    const template = detectFrameworkFromPackageJson(pkgJsonContent);
+
+    console.log(`Formatted ${Object.keys(sandpackFiles).length} files for Sandpack. Detected template: ${template}`);
+    return { files: sandpackFiles, template };
+}
+
+// --- REMOVE OLD Function for Sandpack --- 
+/*
+export async function fetchRepoFilesForSandpack(
+    owner: string, 
+    repo: string, 
+    branch?: string
+): Promise<SandpackFiles> {
+    const repoContents = await fetchRepoContents(owner, repo, branch);
+    
+    const sandpackFiles: SandpackFiles = {};
+    
+    for (const item of repoContents) {
+        if (item.type === 'blob' && item.path) {
+            // Prepend / to the path for Sandpack compatibility
+            const sandpackPath = item.path.startsWith('/') ? item.path : `/${item.path}`;
+            sandpackFiles[sandpackPath] = item.content || '// Error: Content not fetched';
+        } 
+        // We don't include 'tree' items in the flat SandpackFiles structure
+    }
+    
+    console.log(`Formatted ${Object.keys(sandpackFiles).length} files for Sandpack.`);
+    return sandpackFiles;
+} 
 */ 

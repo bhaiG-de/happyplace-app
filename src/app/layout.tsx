@@ -3,8 +3,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { cn } from "@/lib/utils"; // Import cn utility
 import { Header } from "@/components/core/Header"; // Import Header
-import { WebContainerProvider } from "@/context/WebContainerContext"; // Import the provider
-import { AstRegistryProvider } from "@/context/AstRegistryContext"; // Import the AST provider
+// import { Toaster } from "@/components/ui/toaster" // OLD import
+import { Toaster as Sonner } from "@/components/ui/sonner" // NEW import
+import { ThemeProvider } from "@/components/theme-provider"
+// import { WebContainerProvider } from "@/context/WebContainerContext"; // Import the provider -> REMOVED
+// import { AstRegistryProvider } from "@/context/AstRegistryContext"; // Keep AST Provider -> REMOVED
 
 // We'll rely on the font families defined in tailwind.config.ts
 // const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -30,15 +33,23 @@ export default function RootLayout({
           // Add specific font variables here if needed, e.g. inter.variable, jetbrainsMono.variable
         )}
       >
-        {/* Wrap the main content area with the providers */}
-        <WebContainerProvider>
-          <AstRegistryProvider> { /* AST Provider needs WebContainer context */}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {/* <WebContainerProvider> -> REMOVED */}
+            {/* <AstRegistryProvider> -> REMOVED */}
             <div className="relative flex min-h-screen flex-col">
               <Header /> { /* Use the actual Header component */}
               <main className="flex-1 container py-6">{children}</main>
             </div>
-          </AstRegistryProvider>
-        </WebContainerProvider>
+            {/* </AstRegistryProvider> -> REMOVED */}
+          {/* </WebContainerProvider> -> REMOVED */}
+          {/* <Toaster /> -> OLD */}
+          <Sonner /> {/* NEW */} 
+        </ThemeProvider>
       </body>
     </html>
   );
