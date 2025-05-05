@@ -10,7 +10,7 @@
 ├── .env.example                 # Environment variables example
 ├── .gitignore                   # Git ignore configuration
 ├── next.config.js               # Next.js configuration (COOP/COEP headers removed, may be re-added if needed elsewhere)
-├── package.json                 # Dependencies and scripts (Sandpack, React Flow, Node Tree-sitter [server])
+├── package.json                 # Dependencies and scripts (Sandpack, React Flow, **@babel/parser, Recast, Prettier [client]**)
 ├── tsconfig.json                # TypeScript configuration
 ├── tailwind.config.ts           # Tailwind CSS configuration (including custom tokens)
 └── README.md                    # Project documentation
@@ -24,8 +24,6 @@
 │   ├── api/                     # API routes
 │   │   ├── ai/                  # AI-related endpoints
 │   │   │   └── chat/           # AI chat endpoint for LLM integration
-│   │   ├── ast/                  # **NEW:** AST-related endpoints
-│   │   │   └── parse/            # Server-side parsing endpoint
 │   │   ├── github/             # GitHub integration endpoints
 │   │   └── socket/             # WebSocket endpoints for real-time sync (if needed beyond Sandpack)
 │   ├── (auth)/                 # Authentication routes (group)
@@ -49,7 +47,7 @@
 │   │   └── Tabs.tsx            # Tab navigation between Knowledge/Design/Code
 │   ├── design/                 # Design mode components
 │   │   ├── Canvas.tsx          # React Flow canvas for rendering AST visualization
-│   │   ├── Inspector.tsx       # Property inspector for editing component props
+│   │   ├── Inspector.tsx       # Property inspector for editing component props (reads props from AST node found via UID map)
 │   │   ├── Nodes/              # React Flow node components
 │   │   │   ├── ComponentNode.tsx    # Visual representation of React components
 │   │   │   ├── ContainerNode.tsx    # Nodes for wrapping child components
@@ -75,12 +73,15 @@
 ├── lib/                         # Utility libraries
 │   ├── ai/                     # AI utilities
 │   │   ├── agent.ts            # AI agent logic (tools use Sandpack file ops)
-│   │   └── tools.ts            # AI tools implementation (file ops via Sandpack, AST via client registry)
-│   ├── ast/                    # **REVISED:** Client-side AST handling helpers
-│   │   ├── traversal.ts        # AST traversal utilities (operates on fetched AST JSON)
-│   │   ├── mapper.ts           # Converts AST JSON to React Flow nodes/edges
-│   │   ├── codegen.ts          # AST to code generation (Recast + Prettier)
-│   │   └── clientRegistry.ts   # **NEW:** Manages client-side storage of ASTs from API
+│   │   └── tools.ts            # AI tools implementation (file ops via Sandpack, AST manipulation via client registry/codegen)
+│   ├── ast/                    # **REVISED:** Client-side AST handling with **@babel/parser**
+│   │   ├── parser.ts           # **NEW:** Client-side parsing logic using **@babel/parser** (with JSX/TS plugins)
+│   │   ├── traversal.ts        # AST traversal utilities (e.g., for `data-uid` injection, prop extraction - use `@babel/traverse`?)
+│   │   ├── instrumentation.ts  # **NEW:** Logic for injecting `data-uid` and building UID-to-AST map
+│   │   ├── propExtraction.ts   # **NEW:** Utility to extract props from JSX AST nodes
+│   │   ├── mapper.ts           # Converts **Babel AST** nodes to React Flow nodes/edges
+│   │   ├── codegen.ts          # AST to code generation (Recast + Prettier, preserves/re-injects `data-uid`)
+│   │   └── ~~clientRegistry.ts~~ # **REMOVED/Merged:** Logic likely within useAstRegistry hook
 │   ├── reactFlow/              # React Flow integration utilities
 │   │   ├── nodeTypes.ts        # Custom node type definitions
 │   │   ├── edgeTypes.ts        # Custom edge type definitions
@@ -98,7 +99,7 @@
 │       ├── debounce.ts         # Debounce utility for editor changes
 │       └── url.ts              # URL parsing utilities
 ├── hooks/                       # Custom React hooks
-│   ├── useAstRegistry.ts       # **REVISED:** Hook managing client AST state & API calls
+│   ├── useAstRegistry.ts       # **REVISED:** Hook managing client AST state (parsing w/ **@babel/parser**, storing **Babel ASTs**, storing UID-to-AST map, handling updates)
 │   ├── ~~useWebContainer.ts~~  # **REMOVED**
 │   ├── ~~useFileSystem.ts~~    # **REMOVED/REPLACED** (File ops via Sandpack hooks e.g. `useActiveCode`)
 │   ├── useFileSelection.ts     # Hook to manage shared file selection state
@@ -113,10 +114,10 @@
 │   ├── DesignContext.tsx       # React Flow state and AST visualization config
 │   ├── CodeContext.tsx         # Editor state and open files tracking
 │   ├── ~~WebContainerContext.tsx~~ # **REMOVED**
-│   ├── AstRegistryContext.tsx  # **REVISED/Optional:** Context wrapping `useAstRegistry` if needed
+│   ├── AstRegistryContext.tsx  # **REVISED/Optional:** Context wrapping client-side `useAstRegistry` (using **Babel AST**)
 │   └── SandpackContextWrapper.tsx # **NEW/Optional:** If <SandpackProvider> isn't at the root
 ├── types/                       # TypeScript type definitions
-│   ├── ast.ts                  # AST node and tree types (potentially simplified for JSON transfer)
+│   ├── ast.ts                  # AST node and tree types (**Babel AST** types)
 │   ├── ~~container.ts~~        # **REMOVED**
 │   ├── initiative.ts           # Initiative/project types and metadata
 │   ├── fileTree.ts             # File tree structure and selection types
@@ -144,9 +145,6 @@
 ### AI Chat API
 - `POST /api/ai/chat` - Handles chat messages and AI responses with tool execution (Tools adapted for Sandpack and client-side AST registry)
 
-### **NEW:** AST API
-- `POST /api/ast/parse` - Accepts `{ code: string, language: string }`, returns `{ astJson: object | null, error?: string }` after server-side parsing.
-
 ### GitHub API
 - `GET /api/github/repos` - List repositories for the authenticated user
 - `POST /api/github/repo/load` - Fetch repo files to populate Sandpack `files` prop
@@ -158,25 +156,24 @@
 
 ## React Flow Integration for AST Visualization
 
-1.  **AST Retrieval & Analysis**:
-    *   `src/hooks/useAstRegistry.ts` fetches AST JSON from `/api/ast/parse`.
-    *   `src/lib/ast/clientRegistry.ts` stores this JSON.
-    *   `src/lib/ast/traversal.ts` & `src/lib/ast/mapper.ts` operate on the **fetched AST JSON**.
-    *   `src/lib/ast/codegen.ts` handles client-side code modifications based on AST JSON.
-    *   `src/lib/reactFlow/nodeTypes.ts` defines visual representations.
-    *   `src/lib/reactFlow/layoutEngine.ts` handles automatic positioning.
+1.  **AST Retrieval & Analysis**: (Client-Side)
+    *   `src/hooks/useAstRegistry.ts` manages AST state, triggering **client-side parsing with @babel/parser** (`src/lib/ast/parser.ts`) on file changes.
+    *   The hook also manages **`data-uid` injection** (`src/lib/ast/instrumentation.ts`) and stores the **UID-to-AST map** alongside the ASTs.
+    *   `src/lib/ast/traversal.ts` & `src/lib/ast/mapper.ts` operate on the **client-side Babel AST**.
+    *   `src/lib/ast/codegen.ts` handles client-side code modifications based on the **Babel AST**.
+    *   `src/lib/reactFlow/nodeTypes.ts` defines visual representations. (Unchanged)
+    *   `src/lib/reactFlow/layoutEngine.ts` handles automatic positioning. (Unchanged)
 
-2.  **React Flow Canvas**:
-    *   `src/components/design/Canvas.tsx` implements the main React Flow instance. (Unchanged)
-    *   Custom nodes/edges in `src/components/design/Nodes/` & `src/components/design/Edges/`. (Unchanged)
+2.  **React Flow Canvas**: (Unchanged)
+    *   `src/components/design/Canvas.tsx` implements the main React Flow instance.
 
 3.  **State Management**:
     *   `src/hooks/useReactFlow.ts` manages React Flow state. (Unchanged)
     *   `src/hooks/useDesignView.ts` connects AST changes (derived from Sandpack state) to visual updates.
     *   `src/context/DesignContext.tsx` provides design state. (Unchanged)
 
-4.  **Synchronization**:
-    *   Updates flow from Sandpack state (`updateCode` call -> state change -> API call -> client AST registry update -> React Flow update).
+4.  **Synchronization**: (Client-Side Focus)
+    *   Updates flow from Sandpack state (`updateCode` call -> state change -> `useAstRegistry` triggers re-parse & re-instrumentation -> React Flow update).
     *   WebSocket role might shift towards collaboration features rather than core file sync.
 
 ## App Architecture and Features (Sandpack Adapted)
@@ -189,9 +186,9 @@
     *   React Flow canvas visualizes components based on AST derived from Sandpack state.
     *   Inspector edits trigger AST patching -> `codegen` -> `updateCode`.
 
-3.  **Code Mode**:
+3.  **Code Mode**: (Client-Side Parsing)
     *   Monaco editor displays files from Sandpack state (`useActiveCode`).
-    *   Changes use `updateCode` to modify Sandpack state.
+    *   Changes use `updateCode` to modify Sandpack state, triggering client-side re-parsing with **@babel/parser** via `useAstRegistry`.
 
 4.  **Preview**:
     *   Managed by `<SandpackPreview>` (likely wrapped).
@@ -200,9 +197,9 @@
 5.  **Tabs System**: (Unchanged)
     *   Knowledge/Design/Code tabs provide different views of the project.
 
-6.  **AI Integration**:
+6.  **AI Integration**: (Client-Side AST)
     *   Chat interface.
-    *   Tools operate on Sandpack file state and **client-side AST registry**.
+    *   Tools operate on Sandpack file state and **client-side Babel AST registry/map** (`editFile` uses `codegen.ts`).
 
 ## ~~Preview App Structure (`/preview-app`)~~ **REMOVED**
 

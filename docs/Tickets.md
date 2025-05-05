@@ -55,36 +55,33 @@
 
 ---
 
-## Phase 3 – AST Core & Server-Side Parsing ☐ *(Needs Re-Implementation)*
+## Phase 3 – AST Core & Client-Side Parsing ☑ *(Needs Re-Implementation)*
 
-*Goal: Re-establish AST capabilities by parsing code on the server to avoid browser COEP/COOP limitations.*
+*Goal: Re-establish AST capabilities using client-side **@babel/parser** parsing to avoid browser COEP/COOP limitations.*
 
 | ID | Ticket | Status |
 |----|--------|--------|
-| **P3‑01** | Install Node Tree-sitter deps (`tree-sitter`, `tree-sitter-javascript`, `tree-sitter-typescript`, `tree-sitter-tsx`) | ☐ |
-| **P3‑02** | Create API endpoint (`/api/ast/parse`) for single-file parsing | ☐ |
-| **P3‑03** | Implement server-side parser logic in API endpoint (accept single file code/language, return AST JSON) | ☐ |
-| **P3‑04** | Refactor/Create `useAstRegistry` hook (client-side) | ☐ |
-| **P3‑05** | Implement `discoverSourceFiles` util (client-side, operates on Sandpack files) | ☐ |
-| **P3‑06** | Implement logic in `useAstRegistry` to call `/api/ast/parse` (debounced) for **single changed files** | ☐ |
-| **P3‑07** | Implement client-side AST storage (Map) in `useAstRegistry` | ☐ |
-| **P3‑08** | Hook `useAstRegistry` to Sandpack file changes to trigger re-parsing via API | ☐ |
-| **P3‑09** | Remove client-side WASM files (`/public/wasm`) and `web-tree-sitter` dep (if not already done) | ☑ |
-| **P3‑10** | Unit tests: API endpoint parsing, client-side registry logic *(Deferred)* | ☐ |
+| **P3‑01** | Install client-side AST deps: `@babel/parser`. (Add `recast`, `prettier` if not covered in P5-01) | ☑ |
+| **P3‑02** | Create client-side parsing utility (`lib/ast/parser.ts`) using `@babel/parser` with **JSX and TypeScript plugins** | ☑ |
+| **P3‑03** | ~~Implement server-side parser logic~~ **(Removed)** | ⊗ |
+| **P3‑04** | Refactor/Create `useAstRegistry` hook (client-side, using **Babel AST**) | ☑ |
+| **P3‑05** | Implement `discoverSourceFiles` util (client-side, operates on Sandpack files) | ☑ |
+| **P3‑06** | Implement logic in `useAstRegistry` to trigger client-side **@babel/parser** parsing & **instrumentation** (debounced) for single changed files | ☑ |
+| **P3‑07** | Implement client-side AST storage (Map of **Babel AST File** objects) & **UID-to-ASTNode map** in `useAstRegistry` | ☑ |
+| **P3‑08** | Hook `useAstRegistry` to Sandpack file changes to trigger client-side re-parsing & re-instrumentation | ☑ |
 
 **Phase 3 Notes:**
-- This approach shifts parsing from the client (WASM) to the server (Node.js) via an API.
-- P3-01: Add these to `devDependencies` in `package.json`.
-- P3-02: Define request/response format (e.g., `{ code: string, language: string }` -> `{ astJson: object | null, error?: string }`). Endpoint designed for **single files** to keep payload small.
-- P3-03: Use Node Tree-sitter bindings on the server to parse the provided code snippet.
-- P3-04: Manages client-side state (AST map, status, errors) and API interaction.
-- P3-06: **Crucially**, API calls are made only for the specific file that changed in Sandpack state, not the whole project. Calls from editor changes should be **debounced**.
-- P3-07: Store potentially simplified JSON representations of the AST to avoid large client memory usage. Registry updated file-by-file based on API responses.
+- Shifts parsing back to the client using `@babel/parser`.
+- P3-01: Add `@babel/parser`, `recast`, `prettier`, `nanoid` (or similar UUID lib) to `dependencies`. Ensure `@babel/plugin-syntax-jsx` and `@babel/plugin-syntax-typescript` are available or installed if not included with `@babel/parser` itself.
+- P3-02: Utility (`lib/ast/parser.ts`) takes code string, returns **Babel AST File object**, configured with `jsx` and `typescript` plugins.
+- P3-04: `useAstRegistry` hook manages client state (**Babel ASTs**, UID map, status) and orchestrates parsing (`lib/ast/parser.ts`) and instrumentation (`lib/ast/instrumentation.ts` - see P5-02b).
+- P3-06: Parsing & instrumentation triggered *client-side* for changed files, debounced.
+- P3-07: Hook stores both the full **Babel AST File** objects and the map linking injected `data-uid`s to **Babel AST nodes**.
 - P3-09: Confirmed.
 
 **Progress Notes:**
-- Previous client-side AST implementation was removed.
-- This phase outlines the steps to rebuild AST functionality using server-side parsing.
+- Previous client-side WASM AST implementation was removed.
+- This phase outlines rebuilding AST functionality using client-side **@babel/parser** parsing **and `data-uid` instrumentation**.
 
 ---
 
@@ -107,27 +104,35 @@
 
 | ID | Ticket | Status |
 |----|--------|--------|
-| **P5‑01** | Add deps: `recast`, `@babel/parser`, `prettier` | ☐ |
-| **P5‑02** | Design Mode Toggle: Implement UI element | ☐ |
-| **P5‑03** | **Preview Instrumentation (if needed):** Add mechanism to identify elements in Sandpack preview | ☐ |
-| **P5‑04** | **Preview Interaction:** Implement click listener in Sandpack preview; `postMessage` selected element identifier to host app (Requires P6-07 equivalent). | ☐ |
-| **P5‑05** | **DOM-to-AST Mapping:** Develop logic to map element identifier from P5-04 back to its source AST node (using client-side AST from P3). | ☐ |
-| **P5‑06** | **Prop Extraction:** Traverse identified AST node (from P5-05) to extract component props. | ☐ |
-| **P5‑07** | **Inspector UI:** Build panel (`src/components/design/Inspector.tsx`) | ☐ |
-| **P5‑08** | **AST Prop Patcher:** Create function (`applyPropPatch`?) (operates **client-side** on AST from registry). | ☐ |
-| **P5‑09** | **Codegen & Save:** Use `lib/ast/codegen.ts` (`printAst`) (**client-side**) and **Sandpack's `updateCode`** | ☐ |
-| **P5‑10** | **E2E Test:** Verify full loop: toggle mode -> click -> inspect/edit -> save -> check code & Sandpack preview update (via Sandpack HMR). | ☐ |
+| **P5‑01** | Add/Confirm deps: `recast`, `prettier`, `nanoid` (or UUID lib) | ☑ |
+| **P5‑02** | Design Mode Toggle: Implement UI element | ☑ |
+| **P5‑02b**| **AST Instrumentation:** Implement AST traversal utility (`lib/ast/instrumentation.ts`) to inject `data-uid` into JSX elements & build UID-to-ASTNode map (called by `useAstRegistry`) | ☑ |
+| **P5‑03** | ~~Preview Instrumentation (if needed)~~ **(Superseded by P5-02b)** | ⊗ |
+| **P5‑04** | **Preview Interaction:** Implement click listener in Sandpack preview; read `data-uid`; `postMessage` UID to host app (Requires P6-07). | ☑ |
+| **P5‑05** | **DOM-to-AST Mapping:** Use UID received from P5-04 to look up AST node in the UID-to-ASTNode map (from P5-02b). | ☑ |
+| **P5‑06** | **Prop Extraction:** Traverse identified client-side **Babel AST node** (from P5-05) to extract component props & infer types. | ☑ |
+| **P5‑07** | **Inspector UI:** Build panel (`src/components/design/Inspector.tsx`) to display/edit props using type-aware `shadcn/ui` controls. | ☑ |
+| **P5‑08** | **AST Prop Patcher:** Create function (`applyPropPatch` in `lib/ast/patching.ts`) operating client-side on the **Babel AST node** (from P5-05). | ☑ |
+| **P5‑09** | **Codegen & Save:** Use `recast`/`prettier` client-side, ensuring `data-uid` persists; save via Sandpack's `updateCode`. | ☐ |
+| **P5‑10** | **E2E Test:** Verify full loop: toggle mode -> click (`data-uid`) -> inspect/edit -> save -> check code (`data-uid` present) & Sandpack preview update. | ☐ |
 | **P5‑OLD‑05** | *(Low Priority)* Update Socket payloads to optionally send diffs? | ☐ |
 
 **Phase 5 Notes:**
-- This phase now depends on the **client-side AST registry populated by the server API (Phase 3)**.
-- **Editing Workflow:** Visual edits trigger **client-side** AST patching (P5-08) and code generation (P5-09). The *result* is saved to Sandpack via `updateCode`. This save triggers the Phase 3 hook (P3-08) to call the API (P3-06, debounced) with the new code for the *single changed file* to update the client AST registry for consistency.
-- P5-05, P5-06, P5-08: Logic operates on the AST data fetched from the server and stored by `useAstRegistry`.
-- P5-09: Code generation happens client-side.
-- P5-03, P5-04: Still require investigation into Sandpack preview communication.
+- Depends on the **client-side Babel AST registry and UID map (P3)**.
+- Core mechanism is **`data-uid` injection** (implemented in `lib/ast/instrumentation.ts`, triggered by P3 hook - P5-02b) into JSX via AST transformation, creating a **map between UIDs and AST nodes**.
+- **Editing Workflow:** Click in preview reads `data-uid` (P5-04) -> map lookup finds AST node (P5-05) -> props extracted & types inferred (P5-06) -> inspector shows `shadcn/ui` controls (P5-07) -> edits patch the AST node (P5-08) -> code regenerates *with UIDs* (P5-09) -> saved to Sandpack -> `useAstRegistry` reparses & **re-instruments with `data-uid`** (P3/P5-02b) to keep map consistent.
+- P5-01: Dependencies confirmed/added during P3.
+- P5-04: Implemented using `postMessage` for Preview -> Host communication.
+- P5-06: `extractPropsFromNode` enhanced to return structured `ExtractedPropInfo` including inferred `PropType`.
+- P5-07: `Inspector.tsx` implemented using inferred types to render appropriate `shadcn/ui` controls (`Input`, `Checkbox`, etc.). Local edit state managed.
+- P5-08: `applyPropPatch` function created in `lib/ast/patching.ts` to mutate AST nodes based on `PropValue`.
 
 **Progress Notes:**
-- Phase remains blocked until Phase 3 (AST Core) is re-implemented.
+- Inspection loop (Click -> UID -> AST Node -> Prop Extraction -> Display) is functional. ☑
+- Hover effect & click interception added to preview. ☑
+- **AST Prop Patcher (`applyPropPatch`) implemented.** ☑
+- **Inspector UI significantly improved:** Uses `shadcn/ui` controls based on inferred prop types (color, boolean, number, string, unit, code). ☑
+- Phase remains blocked by **P5-09 (Codegen & Save)** to complete the editing loop.
 
 ---
 
@@ -157,23 +162,23 @@
 
 ---
 
-## Phase 7 – AI Agent Integration ☐ *(Adaptation Required / Blocked)*
+## Phase 7 – AI Agent Integration ☐ *(Partially Blocked by P3/P5)*
 
 | ID | Ticket | Status |
 |----|--------|--------|
 | **P7‑01** | Install `ai`, `@ai-sdk/react`, provider SDK | ☐ |
 | **P7‑02** | `/api/ai/chat` endpoint using `streamText` | ☐ |
 | **P7‑03** | Define Zod schemas for tools: `readFile`, `editFile` | ☐ |
-| **P7‑04** | Implement tool execution: `readFile` uses Sandpack state, `editFile` uses AST + `updateCode` (P5-09) | ☐ |
+| **P7‑04** | Implement tool execution: `readFile` uses Sandpack state, `editFile` uses **client-side Babel AST** (P3) + **Recast/Prettier** (P5) + `updateCode` | ☐ |
 | **P7‑05** | Chat UI components (`src/components/ai/Chat.tsx`, etc.) | ☐ |
 
 **Phase 7 Notes:**
 - P7-01, P7-02, P7-03, P7-05: Unchanged status.
-- P7-04: Blocked by AST removal for `editFile`. `readFile` could potentially be implemented.
+- P7-04: Blocked by P3 (AST registry) and potentially P5 (codegen logic) for `editFile`. `readFile` can be implemented using only Sandpack state.
 
 **Progress Notes:**
-- AI tools requiring AST (`editFile`) are blocked.
-- Basic `readFile` tool could potentially be implemented using Sandpack state.
+- AI tools requiring AST (`editFile`) are blocked by P3/P5 but are now planned to operate entirely client-side using **Babel AST**.
+- Basic `readFile` tool can be implemented using Sandpack state.
 
 ---
 
